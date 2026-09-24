@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
+import { ensureTenant } from './db/tenant-repository.js';
+import { getUsage } from './db/conversation-repository.js';
 
+import { chatRoute } from './routes/chat.js';
 import { ProviderRegistry } from './providers/registry.js';
 import { TestProvider } from './providers/test-provider.js';
 import { GeminiProvider } from './providers/gemini.js';
@@ -8,27 +11,17 @@ import { OpenAIProvider } from './providers/openai.js';
 
 const app = express();
 
+app.use(express.json());
+
 const port: number = 3000;
 
-const registry = new ProviderRegistry();
+ensureTenant('tenant-a', 'Demo Tenant');
 
-registry.register(new TestProvider());
-
-const geminiApiKey = process.env.GEMINI_API_KEY;
-
-if (geminiApiKey) {
-    registry.register(new GeminiProvider(geminiApiKey));
-}
-
-const openaiApiKey = process.env.OPENAI_API_KEY;
-
-if (openaiApiKey) {
-    registry.register(new OpenAIProvider(openaiApiKey));
-}
+import { providerRegistry } from './providers/index.js';
 
 app.get('/', async (req, res) => {
     try {
-        const provider = registry.get('test');
+        const provider = providerRegistry.get('test')
 
         const response = await provider.complete({
             model: 'test-model',
@@ -70,7 +63,7 @@ app.get('/stream', async (req, res) => {
         const providerName = req.query.provider?.toString() ?? 'test';
         const model = req.query.model?.toString() ?? 'test-model';
 
-        const provider = registry.get(providerName);
+        const provider = providerRegistry.get(providerName)
 
         const stream = provider.stream({
             model,
@@ -109,7 +102,7 @@ app.get('/stream', async (req, res) => {
 
 app.get('/gemini-test', async (req, res) => {
     try {
-        const provider = registry.get('gemini');
+        const provider = providerRegistry.get('gemini')
 
         const response = await provider.complete({
             model: 'gemini-flash',
@@ -137,32 +130,53 @@ app.get('/gemini-test', async (req, res) => {
 });
 
 app.get('/openai-test', async (req, res) => {
-  try {
-    const provider = registry.get('openai');
+    try {
+        const provider = providerRegistry.get('openai')
 
-    const response = await provider.complete({
-      model: 'openai-luna',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Say hello from OpenAI in one short sentence.',
-            },
-          ],
-        },
-      ],
+        const response = await provider.complete({
+            model: 'openai-luna',
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'text',
+                            text: 'Say hello from OpenAI in one short sentence.',
+                        },
+                    ],
+                },
+            ],
+        });
+
+        res.json(response);
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            error: 'OpenAI request failed',
+        });
+    }
+});
+
+app.post('/api/chat', chatRoute);
+
+app.get('/api/usage', (req, res) => {
+    const tenantId = req.query.tenantId?.toString();
+
+    if (!tenantId) {
+        res.status(400).json({
+            error: 'tenantId is required',
+        });
+
+        return;
+    }
+
+    const usage = getUsage(tenantId);
+
+    res.json({
+        tenantId,
+        usage,
     });
-
-    res.json(response);
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      error: 'OpenAI request failed',
-    });
-  }
 });
 
 app.listen(port, () => {

@@ -30,3 +30,24 @@ export function getTenant(id: string): Tenant | null {
 
   return tenant ?? null;
 }
+
+export function ensureTenant(
+  id: string,
+  name: string
+): Tenant {
+  const existing = getTenant(id);
+
+  if (existing) {
+    return existing;
+  }
+
+  db.prepare(`
+    INSERT INTO tenants (id, name)
+    VALUES (?, ?)
+  `).run(id, name);
+
+  return {
+    id,
+    name,
+  };
+}

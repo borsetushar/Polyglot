@@ -30,7 +30,7 @@ db.exec(`
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
   );
 
-  CREATE TABLE IF NOT EXISTS usage (
+ CREATE TABLE IF NOT EXISTS usage (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
     conversation_id TEXT,
@@ -39,11 +39,15 @@ db.exec(`
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cost_usd REAL NOT NULL DEFAULT 0,
+    ttft_ms INTEGER,
     latency_ms INTEGER,
+    finish_reason TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    fallback_used INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-  );
+);
 
   CREATE INDEX IF NOT EXISTS idx_conversations_tenant
     ON conversations(tenant_id);
