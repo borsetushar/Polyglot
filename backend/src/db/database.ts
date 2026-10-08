@@ -10,6 +10,26 @@ db.exec(`
     name TEXT NOT NULL
   );
 
+ CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    embedding_provider TEXT NOT NULL,
+    embedding_model TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (document_id) REFERENCES documents(id)
+);
   CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -57,6 +77,15 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_usage_tenant
     ON usage(tenant_id);
+
+    CREATE INDEX IF NOT EXISTS idx_documents_tenant
+    ON documents(tenant_id);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_tenant
+    ON chunks(tenant_id);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_document
+    ON chunks(document_id);
 `);
 
 export default db;

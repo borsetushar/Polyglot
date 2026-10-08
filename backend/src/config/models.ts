@@ -71,6 +71,38 @@ export const models: Record<string, ModelConfig> = {
             outputPerMTok: 1.2,
         },
     },
+
+    'test-model': {
+        provider: 'test',
+        providerModelId: 'test-model',
+        contextWindow: 128000,
+        capabilities: {
+            tools: false,
+            vision: false,
+            jsonSchema: false,
+            streaming: true,
+        },
+        pricing: {
+            inputPerMTok: 0,
+            outputPerMTok: 0,
+        },
+    },
+
+    'capture-model': {
+        provider: 'capture',
+        providerModelId: 'capture-model',
+        contextWindow: 128000,
+        capabilities: {
+            tools: false,
+            vision: false,
+            jsonSchema: false,
+            streaming: true,
+        },
+        pricing: {
+            inputPerMTok: 0,
+            outputPerMTok: 0,
+        },
+    },
 };
 
 export function getModelConfig(modelId: string): ModelConfig {

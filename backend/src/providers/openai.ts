@@ -1,4 +1,7 @@
 import OpenAI from 'openai';
+import type {
+    ResponseInputItem,
+} from 'openai/resources/responses/responses';
 
 import { getModelConfig } from '../config/models.js';
 import { createProviderError } from '../utils/errors.js';
@@ -23,25 +26,97 @@ export class OpenAIProvider implements Provider {
         });
     }
 
+    private buildTools(
+        req: CompletionRequest
+    ) {
+        return (req.tools ?? []).map((tool) => ({
+            type: 'function' as const,
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+            strict: false,
+        }));
+    }
+    private buildInput(
+        req: CompletionRequest
+    ): ResponseInputItem[] {
+        const input: ResponseInputItem[] = [];
+
+        for (const message of req.messages) {
+            if (message.role === 'user') {
+                input.push({
+                    role: 'user',
+                    content: message.content
+                        .filter(
+                            (block) =>
+                                block.type === 'text'
+                        )
+                        .map(
+                            (block) =>
+                                block.text ?? ''
+                        )
+                        .join(''),
+                });
+
+                continue;
+            }
+
+            if (message.role === 'assistant') {
+                for (const block of message.content) {
+                    if (block.type === 'text') {
+                        input.push({
+                            role: 'assistant',
+                            content:
+                                block.text ?? '',
+                        });
+                    }
+
+                    if (block.type === 'tool_use') {
+                        input.push({
+                            type: 'function_call',
+                            call_id:
+                                block.id ?? '',
+                            name:
+                                block.name ?? '',
+                            arguments:
+                                JSON.stringify(
+                                    block.input ?? {}
+                                ),
+                        });
+                    }
+                }
+
+                continue;
+            }
+
+            if (message.role === 'tool') {
+                for (const block of message.content) {
+                    if (block.type === 'tool_result') {
+                        input.push({
+                            type: 'function_call_output',
+                            call_id:
+                                block.toolUseId ?? '',
+                            output:
+                                block.content ?? '',
+                        });
+                    }
+                }
+            }
+        }
+
+        return input;
+    }
     async complete(
         req: CompletionRequest
     ): Promise<CompletionResponse> {
         try {
             const config = getModelConfig(req.model);
 
-            const input = req.messages
-                .filter((message) => message.role !== 'tool')
-                .map((message) => ({
-                    role: message.role === 'assistant' ? 'assistant' as const : 'user' as const,
-                    content: message.content
-                        .filter((block) => block.type === 'text')
-                        .map((block) => block.text ?? '')
-                        .join(''),
-                }));
-
+            const input = this.buildInput(req);
             const response = await this.client.responses.create({
                 model: config.providerModelId,
                 input,
+                tools: this.buildTools(req),
                 ...(req.system !== undefined && {
                     instructions: req.system,
                 }),
@@ -52,13 +127,29 @@ export class OpenAIProvider implements Provider {
                     signal: req.signal,
                 }),
             });
+            const content: ContentBlock[] = [];
 
-            const content: ContentBlock[] = [
-                {
-                    type: 'text',
-                    text: response.output_text,
-                },
-            ];
+            for (const item of response.output) {
+                if (item.type === 'message') {
+                    for (const block of item.content) {
+                        if (block.type === 'output_text') {
+                            content.push({
+                                type: 'text',
+                                text: block.text,
+                            });
+                        }
+                    }
+                }
+
+                if (item.type === 'function_call') {
+                    content.push({
+                        type: 'tool_use',
+                        id: item.call_id,
+                        name: item.name,
+                        input: JSON.parse(item.arguments),
+                    });
+                }
+            }
 
             const usage: Usage = {
                 inputTokens: response.usage?.input_tokens ?? 0,
@@ -68,8 +159,14 @@ export class OpenAIProvider implements Provider {
             return {
                 content,
                 usage,
-                finishReason: 'stop',
+                finishReason:
+                    content.some(
+                        (block) => block.type === 'tool_use'
+                    )
+                        ? 'tool_use'
+                        : 'stop',
             };
+
         } catch (error) {
             throw this.normalizeError(error);
         }
@@ -81,20 +178,18 @@ export class OpenAIProvider implements Provider {
         try {
             const config = getModelConfig(req.model);
 
-            const input = req.messages
-                .filter((message) => message.role !== 'tool')
-                .map((message) => ({
-                    role: message.role === 'assistant' ? 'assistant' as const : 'user' as const,
-                    content: message.content
-                        .filter((block) => block.type === 'text')
-                        .map((block) => block.text ?? '')
-                        .join(''),
-                }));
+            const input = this.buildInput(req);
+            
+            let hasToolCall = false;
+            let currentToolCallId = '';
+            let currentToolName = '';
+            let currentToolArguments = '';
 
             const stream = await this.client.responses.create({
                 model: config.providerModelId,
                 input,
                 stream: true,
+                tools: this.buildTools(req),
                 ...(req.system !== undefined && {
                     instructions: req.system,
                 }),
@@ -118,6 +213,54 @@ export class OpenAIProvider implements Provider {
                     };
                 }
 
+                if (event.type === 'response.output_item.added') {
+                    if (event.item.type === 'function_call') {
+                        hasToolCall = true;
+
+                        currentToolCallId = event.item.call_id;
+                        currentToolName = event.item.name;
+                        currentToolArguments = '';
+
+                        yield {
+                            type: 'tool_use_start',
+                            id: currentToolCallId,
+                            name: currentToolName,
+                        };
+                    }
+                }
+
+                if (
+                    event.type ===
+                    'response.function_call_arguments.delta'
+                ) {
+                    currentToolArguments += event.delta;
+
+                    yield {
+                        type: 'tool_use_delta',
+                        id: currentToolCallId,
+                        partialJson: event.delta,
+                    };
+                }
+
+                if (
+                    event.type ===
+                    'response.function_call_arguments.done'
+                ) {
+                    const input =
+                        JSON.parse(
+                            event.arguments
+                        );
+
+                    yield {
+                        type: 'tool_use_complete',
+                        id: currentToolCallId,
+                        name: currentToolName,
+                        input,
+                    };
+
+                    currentToolArguments = '';
+                }
+
                 if (event.type === 'response.completed') {
                     const usage = event.response.usage;
 
@@ -133,7 +276,9 @@ export class OpenAIProvider implements Provider {
 
                     yield {
                         type: 'done',
-                        finishReason: 'stop',
+                        finishReason: hasToolCall
+                            ? 'tool_use'
+                            : 'stop',
                     };
                 }
             }

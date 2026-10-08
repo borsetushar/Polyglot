@@ -2,6 +2,14 @@ import type { Request, Response } from 'express';
 import { providerRegistry } from '../providers/index.js';
 import type { Message } from '../providers/types.js';
 import { getModelConfig } from '../config/models.js';
+import { embeddingRegistry } from '../rag/index.js';
+import { retrieveRelevantChunks } from '../rag/retrieval-service.js';
+import {
+    getToolDefinitions,
+} from '../tools/definitions.js';
+import {
+    runStreamingToolLoop,
+} from '../tools/tool-loop.js';
 
 import {
     addMessage,
@@ -18,6 +26,9 @@ interface ChatRequest {
     provider: string;
     model: string;
     message: string;
+    useRag?: boolean;
+    topK?: number;
+    embeddingProvider?: string;
 }
 
 export async function chatRoute(
@@ -34,6 +45,22 @@ export async function chatRoute(
     ) {
         res.status(400).json({
             error: 'Invalid chat request',
+        });
+
+        return;
+    }
+
+    if (
+        body.topK !== undefined &&
+        (
+            typeof body.topK !== 'number' ||
+            !Number.isInteger(body.topK) ||
+            body.topK < 1 ||
+            body.topK > 10
+        )
+    ) {
+        res.status(400).json({
+            error: 'topK must be an integer between 1 and 10',
         });
 
         return;
@@ -84,6 +111,34 @@ export async function chatRoute(
     }
 
     const provider = providerRegistry.get(body.provider);
+
+    let retrievedContext = '';
+
+    let relevantChunks: Awaited<
+        ReturnType<typeof retrieveRelevantChunks>
+    > = [];
+
+    if (body.useRag) {
+        const embeddingProvider =
+            embeddingRegistry.get(
+                body.embeddingProvider ?? 'test'
+            );
+
+        relevantChunks = await retrieveRelevantChunks(
+            body.tenantId,
+            body.message,
+            embeddingProvider,
+            body.topK ?? 3
+        );
+
+        retrievedContext = relevantChunks
+            .map((result, index) => {
+                return `[Source ${index + 1}]
+                Filename: ${result.chunk.filename}
+                ${result.chunk.text}`;
+            })
+            .join('\n\n');
+    }
 
     addMessage(
         conversationId,
@@ -153,6 +208,24 @@ export async function chatRoute(
         })}\n\n`
     );
 
+    if (body.useRag) {
+        for (const [index, result] of relevantChunks.entries()) {
+            res.write(
+                `data: ${JSON.stringify({
+                    type: 'citation',
+                    citation: {
+                        sourceIndex: index + 1,
+                        filename: result.chunk.filename,
+                        documentId: result.chunk.documentId,
+                        chunkId: result.chunk.id,
+                        chunkIndex: result.chunk.chunkIndex,
+                        score: result.score,
+                    },
+                })}\n\n`
+            );
+        }
+    }
+
     const controller = new AbortController();
 
     res.on('close', () => {
@@ -173,11 +246,37 @@ export async function chatRoute(
 
 
     try {
-        const stream = provider.stream({
+        const ragSystemPrompt = body.useRag
+            ? `
+            Answer the user's question using the provided document context.
+
+            If the context does not contain enough information to answer,
+            say that you don't know based on the available documents.
+
+            Document context:
+
+            ${retrievedContext}
+            `
+            : undefined;
+
+        const streamRequest = {
             model: body.model,
             signal: controller.signal,
             messages,
-        });
+            tools: getToolDefinitions(),
+            ...(ragSystemPrompt
+                ? { system: ragSystemPrompt }
+                : {}),
+        };
+
+        const stream =
+            runStreamingToolLoop(
+                provider,
+                streamRequest,
+                { 
+                    tenantId: body.tenantId,
+                }
+            );
 
         for await (const event of stream) {
             console.log('Stream event:', event);
