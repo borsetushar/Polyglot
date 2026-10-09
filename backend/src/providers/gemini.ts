@@ -29,26 +29,30 @@ export class GeminiProvider implements Provider {
   }
 
   private buildTools(req: CompletionRequest): Tool[] {
-  if (!req.tools?.length) {
-    return [];
-  }
+    if (!req.tools?.length) {
+      return [];
+    }
 
-  return [
-    {
-      functionDeclarations: req.tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      })),
-    },
-  ];
-}
+    return [
+      {
+        functionDeclarations: req.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        })),
+      },
+    ];
+  }
 
   private buildContents(
     req: CompletionRequest
   ): Content[] {
     return req.messages.map((message): Content => {
       if (message.role === 'tool') {
+        console.log(
+          '[Gemini tool message]',
+          JSON.stringify(message.content, null, 2)
+        );
         const parts: Part[] = message.content
           .filter(
             (block) => block.type === 'tool_result'
@@ -81,16 +85,18 @@ export class GeminiProvider implements Provider {
             ];
           }
 
+
           if (block.type === 'tool_use') {
             return [
               {
                 functionCall: {
                   name: block.name ?? '',
                   args: block.input ?? {},
-                  ...(block.id
-                    ? { id: block.id }
-                    : {}),
+                  ...(block.id ? { id: block.id } : {}),
                 },
+                ...(block.thoughtSignature
+                  ? { thoughtSignature: block.thoughtSignature }
+                  : {}),
               },
             ];
           }
@@ -208,14 +214,17 @@ export class GeminiProvider implements Provider {
           return;
         }
 
-        const functionCalls =
-          chunk.functionCalls ?? [];
+        const functionCalls = chunk.functionCalls ?? [];
+        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
 
         for (const call of functionCalls) {
           hasToolCall = true;
 
-          const id =
-            call.id ?? crypto.randomUUID();
+          const id = call.id ?? crypto.randomUUID();
+
+          const thoughtSignature = parts.find(
+            (part) => part.functionCall?.name === call.name
+          )?.thoughtSignature;
 
           yield {
             type: 'tool_use_start',
@@ -227,9 +236,8 @@ export class GeminiProvider implements Provider {
             type: 'tool_use_complete',
             id,
             name: call.name ?? '',
-            input:
-              (call.args as Record<string, unknown>) ??
-              {},
+            input: (call.args as Record<string, unknown>) ?? {},
+            ...(thoughtSignature ? { thoughtSignature } : {}),
           };
         }
 
@@ -279,7 +287,10 @@ export class GeminiProvider implements Provider {
     );
   }
 
+
   private normalizeError(error: unknown) {
+    console.error('[Gemini provider error]', error);
+
     return createProviderError(
       'server_error',
       this.name,

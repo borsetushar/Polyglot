@@ -179,27 +179,34 @@ export class OpenAIProvider implements Provider {
             const config = getModelConfig(req.model);
 
             const input = this.buildInput(req);
-            
+
             let hasToolCall = false;
             let currentToolCallId = '';
             let currentToolName = '';
             let currentToolArguments = '';
 
-            const stream = await this.client.responses.create({
-                model: config.providerModelId,
-                input,
-                stream: true,
-                tools: this.buildTools(req),
-                ...(req.system !== undefined && {
-                    instructions: req.system,
-                }),
-                ...(req.maxTokens !== undefined && {
-                    max_output_tokens: req.maxTokens,
-                }),
-                ...(req.signal !== undefined && {
-                    signal: req.signal,
-                }),
-            });
+
+            const stream = await this.client.responses.create(
+                {
+                    model: config.providerModelId,
+                    input,
+                    stream: true,
+                    tools: this.buildTools(req),
+
+                    ...(req.system !== undefined && {
+                        instructions: req.system,
+                    }),
+
+                    ...(req.maxTokens !== undefined && {
+                        max_output_tokens: req.maxTokens,
+                    }),
+                },
+                {
+                    ...(req.signal !== undefined && {
+                        signal: req.signal,
+                    }),
+                }
+            );
 
             for await (const event of stream) {
                 if (req.signal?.aborted) {

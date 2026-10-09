@@ -70,6 +70,7 @@ export async function runToolLoop(
             toolResults.push({
                 type: 'tool_result',
                 toolUseId: toolCall.id,
+                name: toolCall.name,
                 content: result.content,
                 isError: result.isError,
             });
@@ -116,6 +117,9 @@ export async function* runStreamingToolLoop(
                     id: event.id,
                     name: event.name,
                     input: event.input,
+                    ...(event.thoughtSignature
+                        ? { thoughtSignature: event.thoughtSignature }
+                        : {}),
                 });
             }
 
@@ -161,6 +165,7 @@ export async function* runStreamingToolLoop(
             toolResults.push({
                 type: 'tool_result',
                 toolUseId: toolCall.id,
+                name: toolCall.name,
                 content: result.content,
                 isError: result.isError,
             });

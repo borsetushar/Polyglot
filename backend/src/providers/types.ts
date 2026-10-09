@@ -11,6 +11,7 @@ export interface ContentBlock {
     id?: string;
     name?: string;
     input?: Record<string, unknown>;
+    thoughtSignature?: string;
 
     toolUseId?: string;
     content?: string;
@@ -72,6 +73,7 @@ export type StreamEvent =
         id: string;
         name: string;
         input: Record<string, unknown>;
+         thoughtSignature?: string;
     }
     | { type: 'usage'; usage: Usage }
     | { type: 'done'; finishReason: FinishReason }
