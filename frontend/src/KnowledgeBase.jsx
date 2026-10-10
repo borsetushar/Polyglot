@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import './knowledgeBase.css';
+import './KnowledgeBase.css';
 
 export default function KnowledgeBase() {
     const [selectedFile, setSelectedFile] = useState(null);
