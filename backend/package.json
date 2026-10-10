@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "tsx src/server.ts",
     "test": "vitest run --no-file-parallelism"
   },
   "keywords": [],
