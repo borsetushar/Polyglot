@@ -25,6 +25,30 @@ const port = Number(
 
 const MAX_JSON_SIZE = '1mb';
 
+app.use((req, res, next) => {
+    res.setHeader(
+        'Access-Control-Allow-Origin',
+        process.env.FRONTEND_URL ?? '*'
+    );
+
+    res.setHeader(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, DELETE, OPTIONS'
+    );
+
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization'
+    );
+
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+        return;
+    }
+
+    next();
+});
+
 app.use(
     express.json({
         limit: MAX_JSON_SIZE,
