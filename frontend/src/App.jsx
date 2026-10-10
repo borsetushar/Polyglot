@@ -3,6 +3,7 @@ import { useState } from "react";
 import "./App.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import KnowledgeBase from "./KnowledgeBase";
 
 function App() {
   const [provider, setProvider] = useState("gemini");
@@ -12,6 +13,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeController, setActiveController] = useState(null);
+  const [activePage, setActivePage] = useState("chat");
 
   function changeProvider(nextProvider) {
     setProvider(nextProvider);
@@ -174,8 +176,18 @@ function App() {
 
         <div className="sidebar-section">
           <span className="section-label">WORKSPACE</span>
-          <div className="nav-item active">◈ &nbsp; Chat playground</div>
-          <div className="nav-item">▤ &nbsp; Knowledge base</div>
+          <button
+            className={`nav-item ${activePage === "chat" ? "active" : ""}`}
+            onClick={() => setActivePage("chat")}
+          >
+            ◈ &nbsp; Chat playground
+          </button>
+          <button
+            className="nav-item"
+            onClick={() => setActivePage("knowledge")}
+          >
+            Knowledge base
+          </button>
           <div className="nav-item">⌁ &nbsp; Usage & metrics</div>
         </div>
 
@@ -197,131 +209,135 @@ function App() {
           </div>
         </header>
 
-        <section className="chat-layout">
-          <div className="chat-heading">
-            <span className="eyebrow">POLYGLOT PLAYGROUND</span>
-            <h1>Your AI workspace.</h1>
-            <p>One interface. Multiple models. Your own knowledge.</p>
-          </div>
+        {activePage === "knowledge" ? (
+          <KnowledgeBase />
+        ) : (
+          <section className="chat-layout">
+            <div className="chat-heading">
+              <span className="eyebrow">POLYGLOT PLAYGROUND</span>
+              <h1>Your AI workspace.</h1>
+              <p>One interface. Multiple models. Your own knowledge.</p>
+            </div>
 
-          <div className="model-controls">
-            <label>
-              <span>PROVIDER</span>
-              <select
-                value={provider}
-                disabled={loading}
-                onChange={(e) => changeProvider(e.target.value)}
-              >
-                <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI</option>
-                <option value="test">Test provider</option>
-              </select>
-            </label>
+            <div className="model-controls">
+              <label>
+                <span>PROVIDER</span>
+                <select
+                  value={provider}
+                  disabled={loading}
+                  onChange={(e) => changeProvider(e.target.value)}
+                >
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="test">Test provider</option>
+                </select>
+              </label>
 
-            <label>
-              <span>MODEL</span>
-              <select
-                value={model}
-                disabled={loading}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                {provider === "gemini" && (
-                  <option value="gemini-flash">Gemini Flash</option>
-                )}
-                {provider === "openai" && (
-                  <option value="openai-luna">OpenAI model</option>
-                )}
-                {provider === "test" && (
-                  <option value="test-model">Test model</option>
-                )}
-              </select>
-            </label>
-          </div>
+              <label>
+                <span>MODEL</span>
+                <select
+                  value={model}
+                  disabled={loading}
+                  onChange={(e) => setModel(e.target.value)}
+                >
+                  {provider === "gemini" && (
+                    <option value="gemini-flash">Gemini Flash</option>
+                  )}
+                  {provider === "openai" && (
+                    <option value="openai-luna">OpenAI model</option>
+                  )}
+                  {provider === "test" && (
+                    <option value="test-model">Test model</option>
+                  )}
+                </select>
+              </label>
+            </div>
 
-          <div className="messages">
-            {messages.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">✳</div>
-                <h2>What would you like to explore?</h2>
-                <p>Ask a question, test a model, or chat with your documents.</p>
+            <div className="messages">
+              {messages.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">✳</div>
+                  <h2>What would you like to explore?</h2>
+                  <p>Ask a question, test a model, or chat with your documents.</p>
 
-                <div className="suggestions">
-                  {[
-                    "Explain retrieval-augmented generation",
-                    "Calculate 125 × 48",
-                    "How does streaming work?",
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      disabled={loading}
-                      onClick={() => setInput(suggestion)}
-                    >
-                      {suggestion} <span>↗</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              messages.map((message, index) => (
-                <div className="message" key={index}>
-                  <div className={`avatar ${message.role}`}>
-                    {message.role === "user" ? "Y" : "P"}
+                  <div className="suggestions">
+                    {[
+                      "Explain retrieval-augmented generation",
+                      "Calculate 125 × 48",
+                      "How does streaming work?",
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        disabled={loading}
+                        onClick={() => setInput(suggestion)}
+                      >
+                        {suggestion} <span>↗</span>
+                      </button>
+                    ))}
                   </div>
-                  <div>
-                    <strong>
-                      {message.role === "user" ? "You" : "Polyglot"}
-                    </strong>
-                    <div className="message-content">
-                      {message.content ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {message.content}
-                        </ReactMarkdown>
-                      ) : loading && index === messages.length - 1 ? (
-                        "Thinking..."
-                      ) : null}
+                </div>
+              ) : (
+                messages.map((message, index) => (
+                  <div className="message" key={index}>
+                    <div className={`avatar ${message.role}`}>
+                      {message.role === "user" ? "Y" : "P"}
+                    </div>
+                    <div>
+                      <strong>
+                        {message.role === "user" ? "You" : "Polyglot"}
+                      </strong>
+                      <div className="message-content">
+                        {message.content ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {message.content}
+                          </ReactMarkdown>
+                        ) : loading && index === messages.length - 1 ? (
+                          "Thinking..."
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {error && <div className="error-message">{error}</div>}
-
-          <form className="composer" onSubmit={handleSubmit}>
-            <textarea
-              value={input}
-              disabled={loading}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Message Polyglot..."
-              rows={2}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  e.currentTarget.form.requestSubmit();
-                }
-              }}
-            />
-
-            <div className="composer-footer">
-              <span>Enter to send · Shift + Enter for a new line</span>
-
-              {loading ? (
-                <button type="button" onClick={cancelGeneration}>
-                  Stop ■
-                </button>
-              ) : (
-                <button type="submit" disabled={!input.trim()}>
-                  Send <span>↑</span>
-                </button>
+                ))
               )}
             </div>
-          </form>
 
-          <p className="disclaimer">
-            AI responses may be inaccurate. Verify important information.
-          </p>
-        </section>
+            {error && <div className="error-message">{error}</div>}
+
+            <form className="composer" onSubmit={handleSubmit}>
+              <textarea
+                value={input}
+                disabled={loading}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Message Polyglot..."
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    e.currentTarget.form.requestSubmit();
+                  }
+                }}
+              />
+
+              <div className="composer-footer">
+                <span>Enter to send · Shift + Enter for a new line</span>
+
+                {loading ? (
+                  <button type="button" onClick={cancelGeneration}>
+                    Stop ■
+                  </button>
+                ) : (
+                  <button type="submit" disabled={!input.trim()}>
+                    Send <span>↑</span>
+                  </button>
+                )}
+              </div>
+            </form>
+
+            <p className="disclaimer">
+              AI responses may be inaccurate. Verify important information.
+            </p>
+          </section>
+        )}
       </main>
     </div>
   );

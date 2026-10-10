@@ -8,9 +8,9 @@ import { retrieveRelevantChunks } from '../rag/retrieval-service.js';
 export class SearchDocumentsTool implements Tool {
     readonly name = 'search_documents';
 
-    readonly description =
-        'Search the tenant knowledge base for relevant document content. Use this when the user asks about information that may exist in uploaded documents.';
-
+   readonly description =
+    'Search the tenant knowledge base for information in uploaded documents. Use this tool when the user asks a question that may be answered by their documents. Search once with a concise query. After receiving the results, answer the user directly using the retrieved content. Do not call this tool repeatedly to refine the same search. If the results do not contain the answer, say that the uploaded documents do not provide enough information.';
+    
     readonly parameters = {
         type: 'object',
         properties: {
